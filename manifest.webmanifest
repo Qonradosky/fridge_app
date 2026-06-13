@@ -1,0 +1,16 @@
+{
+  "name": "Lodowka wirtualna",
+  "short_name": "Lodowka",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7fbf7",
+  "theme_color": "#236a4b",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
