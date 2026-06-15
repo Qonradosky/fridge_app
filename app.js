@@ -45,6 +45,7 @@ const elements = {
   weightInput: document.querySelector("#weightInput"),
   purchaseDateInput: document.querySelector("#purchaseDateInput"),
   expirationDateInput: document.querySelector("#expirationDateInput"),
+  noExpirationInput: document.querySelector("#noExpirationInput"),
   categoryInput: document.querySelector("#categoryInput"),
   notesInput: document.querySelector("#notesInput"),
   searchInput: document.querySelector("#searchInput"),
@@ -76,6 +77,7 @@ function bindEvents() {
   elements.notifyButton.addEventListener("click", requestNotifications);
   elements.foodForm.addEventListener("submit", handleFoodSubmit);
   elements.cancelEditButton.addEventListener("click", resetForm);
+  elements.noExpirationInput.addEventListener("change", syncExpirationField);
   elements.searchInput.addEventListener("input", render);
   elements.filterInput.addEventListener("change", render);
 }
@@ -147,19 +149,20 @@ function lockApp() {
 function handleFoodSubmit(event) {
   event.preventDefault();
   const id = elements.foodId.value || crypto.randomUUID();
+  const noExpiration = elements.noExpirationInput.checked;
   const payload = {
     id,
     name: elements.nameInput.value.trim(),
     price: Number(elements.priceInput.value),
     purchaseDate: elements.purchaseDateInput.value,
-    expirationDate: elements.expirationDateInput.value,
+    expirationDate: noExpiration ? null : elements.expirationDateInput.value,
     weight: Number(elements.weightInput.value),
     category: elements.categoryInput.value,
     notes: elements.notesInput.value.trim(),
     createdAt: items.find((item) => item.id === id)?.createdAt || new Date().toISOString(),
   };
 
-  if (new Date(payload.expirationDate) < new Date(payload.purchaseDate)) {
+  if (!noExpiration && new Date(payload.expirationDate) < new Date(payload.purchaseDate)) {
     elements.expirationDateInput.setCustomValidity("Termin nie moze byc przed data zakupu.");
     elements.expirationDateInput.reportValidity();
     return;
@@ -181,6 +184,8 @@ function resetForm() {
   elements.cancelEditButton.hidden = true;
   elements.purchaseDateInput.value = toInputDate(new Date());
   elements.expirationDateInput.value = offsetDate(7);
+  elements.noExpirationInput.checked = false;
+  syncExpirationField();
   elements.categoryInput.value = "Nabial";
 }
 
@@ -193,7 +198,9 @@ function editItem(id) {
   elements.priceInput.value = item.price;
   elements.weightInput.value = item.weight;
   elements.purchaseDateInput.value = item.purchaseDate;
-  elements.expirationDateInput.value = item.expirationDate;
+  elements.noExpirationInput.checked = !item.expirationDate;
+  elements.expirationDateInput.value = item.expirationDate || offsetDate(7);
+  syncExpirationField();
   elements.categoryInput.value = item.category;
   elements.notesInput.value = item.notes;
   elements.formTitle.textContent = "Edytuj produkt";
@@ -210,7 +217,7 @@ function deleteItem(id) {
 function render() {
   const enriched = items
     .map((item) => ({ ...item, status: getStatus(item), daysLeft: getDaysLeft(item.expirationDate) }))
-    .sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
+    .sort((a, b) => getSortDate(a.expirationDate) - getSortDate(b.expirationDate));
   const filtered = filterItems(enriched);
 
   renderStats(enriched);
@@ -254,7 +261,7 @@ function renderList(source) {
     const node = elements.template.content.firstElementChild.cloneNode(true);
     node.classList.add(item.status);
     node.querySelector("h3").textContent = item.name;
-    node.querySelector(".food-meta").textContent = `${item.category} • ${item.weight} g/ml • ${formatCurrency(item.price)}`;
+    node.querySelector(".food-meta").textContent = `${item.category} - ${item.weight} g/ml - ${formatCurrency(item.price)}`;
     node.querySelector(".food-details").textContent = getStatusText(item);
     node.querySelector(".edit").addEventListener("click", () => editItem(item.id));
     node.querySelector(".delete").addEventListener("click", () => deleteItem(item.id));
@@ -274,6 +281,7 @@ function filterItems(source) {
 }
 
 function getStatus(item) {
+  if (!item.expirationDate) return "no-expiry";
   const daysLeft = getDaysLeft(item.expirationDate);
   if (daysLeft < 0) return "expired";
   if (daysLeft <= SOON_DAYS) return "soon";
@@ -281,6 +289,7 @@ function getStatus(item) {
 }
 
 function getStatusText(item) {
+  if (item.status === "no-expiry") return "Bez terminu waznosci";
   if (item.status === "expired") return `Po terminie od ${Math.abs(item.daysLeft)} dni`;
   if (item.daysLeft === 0) return "Termin mija dzisiaj";
   if (item.status === "soon") return `Zostalo ${item.daysLeft} dni`;
@@ -288,11 +297,23 @@ function getStatusText(item) {
 }
 
 function getDaysLeft(dateValue) {
+  if (!dateValue) return null;
   const today = new Date();
   const target = new Date(dateValue);
   today.setHours(0, 0, 0, 0);
   target.setHours(0, 0, 0, 0);
   return Math.ceil((target - today) / 86400000);
+}
+
+function getSortDate(dateValue) {
+  return dateValue ? new Date(dateValue).getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function syncExpirationField() {
+  const disabled = elements.noExpirationInput.checked;
+  elements.expirationDateInput.disabled = disabled;
+  elements.expirationDateInput.required = !disabled;
+  elements.expirationDateInput.setCustomValidity("");
 }
 
 async function requestNotifications() {

@@ -93,6 +93,10 @@
                 <input id="expirationDateInput" required type="date" />
               </label>
             </div>
+            <label class="checkbox-label">
+              <input id="noExpirationInput" type="checkbox" />
+              Produkt bez terminu waznosci
+            </label>
             <label>
               Kategoria
               <select id="categoryInput">
@@ -124,6 +128,7 @@
                 <option value="fresh">Swieze</option>
                 <option value="soon">Koncza termin</option>
                 <option value="expired">Po terminie</option>
+                <option value="no-expiry">Bez terminu</option>
               </select>
             </div>
             <div id="alerts" class="alerts"></div>

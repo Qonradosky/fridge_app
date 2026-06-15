@@ -113,6 +113,20 @@ label {
   font-weight: 700;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+}
+
+.checkbox-label input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--primary);
+}
+
 input,
 select,
 textarea {
@@ -387,6 +401,10 @@ textarea:focus {
 
 .food-item.expired .status-dot {
   background: var(--expired);
+}
+
+.food-item.no-expiry .status-dot {
+  background: var(--blue);
 }
 
 .food-main h3 {
