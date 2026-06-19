@@ -1,6 +1,7 @@
 const STORAGE_KEY = "virtual-fridge-items";
 const PIN_KEY = "virtual-fridge-pin";
 const SESSION_KEY = "virtual-fridge-unlocked";
+const THEME_KEY = "virtual-fridge-theme";
 const SOON_DAYS = 3;
 const CATEGORY_GROUPS = {
   food: [
@@ -22,10 +23,9 @@ const CATEGORY_GROUPS = {
   utility: ["Leki i suplementy", "Artykuly dla zwierzat", "Baterie", "Narzedzia i drobiazgi", "Inne zapasy"],
 };
 const CATEGORY_GROUP_LABELS = {
-  food: "Jedzenie",
-  chemistry: "Chemia",
-  utility: "Użytkowe",
-  other: "Inne",
+  food: "Spozywcze",
+  chemistry: "Dom i chemia",
+  utility: "Uzyteczne zapasy",
 };
 
 const initialItems = [
@@ -61,6 +61,7 @@ const elements = {
   pinHint: document.querySelector("#pinHint"),
   lockButton: document.querySelector("#lockButton"),
   notifyButton: document.querySelector("#notifyButton"),
+  themeToggleButton: document.querySelector("#themeToggleButton"),
   categoryTabs: document.querySelectorAll(".category-tab"),
   foodForm: document.querySelector("#foodForm"),
   foodId: document.querySelector("#foodId"),
@@ -76,6 +77,7 @@ const elements = {
   notesInput: document.querySelector("#notesInput"),
   searchInput: document.querySelector("#searchInput"),
   filterInput: document.querySelector("#filterInput"),
+  subcategoryFilters: document.querySelector("#subcategoryFilters"),
   alerts: document.querySelector("#alerts"),
   foodList: document.querySelector("#foodList"),
   totalCount: document.querySelector("#totalCount"),
@@ -86,14 +88,17 @@ const elements = {
 };
 
 let items = loadItems();
-let activeCategoryGroup = "food";
+let activeCategoryGroups = new Set(["food"]);
+let activeSubcategories = new Set();
 
 setup();
 
 function setup() {
+  applySavedTheme();
   elements.purchaseDateInput.value = toInputDate(new Date());
   elements.expirationDateInput.value = offsetDate(7);
   bindEvents();
+  renderSubcategoryFilters();
   showInitialView();
   registerServiceWorker();
 }
@@ -102,6 +107,7 @@ function bindEvents() {
   elements.pinForm.addEventListener("submit", handlePinSubmit);
   elements.lockButton.addEventListener("click", lockApp);
   elements.notifyButton.addEventListener("click", requestNotifications);
+  elements.themeToggleButton.addEventListener("click", toggleTheme);
   elements.foodForm.addEventListener("submit", handleFoodSubmit);
   elements.cancelEditButton.addEventListener("click", resetForm);
   elements.noExpirationInput.addEventListener("change", syncExpirationField);
@@ -175,13 +181,39 @@ function lockApp() {
 }
 
 function handleCategoryTabClick(event) {
-  activeCategoryGroup = event.currentTarget.dataset.categoryGroup;
+  const group = event.currentTarget.dataset.categoryGroup;
+  if (activeCategoryGroups.has(group)) {
+    activeCategoryGroups.delete(group);
+  } else {
+    activeCategoryGroups.add(group);
+  }
+
+  activeSubcategories = new Set(
+    [...activeSubcategories].filter((category) => getSelectedGroupCategories().includes(category)),
+  );
+  syncCategoryTabs();
+  renderSubcategoryFilters();
+  render();
+}
+
+function handleSubcategoryClick(event) {
+  const category = event.currentTarget.dataset.subcategory;
+  if (activeSubcategories.has(category)) {
+    activeSubcategories.delete(category);
+  } else {
+    activeSubcategories.add(category);
+  }
+
+  renderSubcategoryFilters();
+  render();
+}
+
+function syncCategoryTabs() {
   elements.categoryTabs.forEach((tab) => {
-    const isActive = tab.dataset.categoryGroup === activeCategoryGroup;
+    const isActive = activeCategoryGroups.has(tab.dataset.categoryGroup);
     tab.classList.toggle("active", isActive);
     tab.setAttribute("aria-pressed", String(isActive));
   });
-  render();
 }
 
 function handleFoodSubmit(event) {
@@ -304,7 +336,7 @@ function renderList(source) {
     const node = elements.template.content.firstElementChild.cloneNode(true);
     node.classList.add(item.status);
     node.querySelector("h3").textContent = item.name;
-    node.querySelector(".food-meta").textContent = `${CATEGORY_GROUP_LABELS[item.categoryGroup]} - ${item.category} - ${item.weight} g/ml - ${formatCurrency(item.price)}`;
+    node.querySelector(".food-meta").textContent = `${CATEGORY_GROUP_LABELS[item.categoryGroup] || "Uzyteczne zapasy"} - ${item.category} - ${item.weight} g/ml - ${formatCurrency(item.price)}`;
     node.querySelector(".food-details").textContent = getStatusText(item);
     node.querySelector(".edit").addEventListener("click", () => editItem(item.id));
     node.querySelector(".delete").addEventListener("click", () => deleteItem(item.id));
@@ -319,14 +351,65 @@ function filterItems(source) {
   return source.filter((item) => {
     const matchesQuery = [item.name, item.category, item.notes].some((field) => field.toLowerCase().includes(query));
     const matchesFilter = filter === "all" || item.status === filter;
-    const matchesCategoryGroup = item.categoryGroup === activeCategoryGroup;
-    return matchesQuery && matchesFilter && matchesCategoryGroup;
+    const matchesCategoryGroup = activeCategoryGroups.size === 0 || activeCategoryGroups.has(item.categoryGroup);
+    const matchesSubcategory = activeSubcategories.size === 0 || activeSubcategories.has(item.category);
+    return matchesQuery && matchesFilter && matchesCategoryGroup && matchesSubcategory;
   });
 }
 
 function getCategoryGroup(category) {
   const group = Object.entries(CATEGORY_GROUPS).find(([, categories]) => categories.includes(category));
-  return group ? group[0] : "other";
+  return group ? group[0] : "utility";
+}
+
+function renderSubcategoryFilters() {
+  const categories = getSelectedGroupCategories();
+  elements.subcategoryFilters.replaceChildren();
+
+  if (!categories.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted subcategory-empty";
+    empty.textContent = "Wybierz dzial u gory, zeby pokazac podkategorie.";
+    elements.subcategoryFilters.append(empty);
+    return;
+  }
+
+  categories.forEach((category) => {
+    const button = document.createElement("button");
+    const isActive = activeSubcategories.has(category);
+    button.className = "subcategory-toggle";
+    button.classList.toggle("active", isActive);
+    button.type = "button";
+    button.dataset.subcategory = category;
+    button.setAttribute("aria-pressed", String(isActive));
+    button.textContent = category;
+    button.addEventListener("click", handleSubcategoryClick);
+    elements.subcategoryFilters.append(button);
+  });
+}
+
+function getSelectedGroupCategories() {
+  const groups = activeCategoryGroups.size ? [...activeCategoryGroups] : Object.keys(CATEGORY_GROUPS);
+  return groups.flatMap((group) => CATEGORY_GROUPS[group] || []);
+}
+
+function applySavedTheme() {
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  setTheme(savedTheme === "dark" ? "dark" : "light");
+}
+
+function toggleTheme() {
+  const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, nextTheme);
+  setTheme(nextTheme);
+}
+
+function setTheme(theme) {
+  const isDark = theme === "dark";
+  document.documentElement.dataset.theme = theme;
+  elements.themeToggleButton.setAttribute("aria-pressed", String(isDark));
+  elements.themeToggleButton.setAttribute("title", isDark ? "Tryb jasny" : "Tryb ciemny");
+  elements.themeToggleButton.setAttribute("aria-label", isDark ? "Tryb jasny" : "Tryb ciemny");
 }
 
 function getStatus(item) {

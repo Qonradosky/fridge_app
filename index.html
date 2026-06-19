@@ -34,6 +34,10 @@
             <h1>Lodowka wirtualna</h1>
           </div>
           <div class="topbar-actions">
+            <button class="icon-button" id="themeToggleButton" type="button" title="Tryb ciemny" aria-label="Tryb ciemny" aria-pressed="false">
+              <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6.8 6.8 0 0 0 8.5 8.5A8.4 8.4 0 1 1 12 3Z"></path></svg>
+              <svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+            </button>
             <button class="icon-button" id="notifyButton" type="button" title="Powiadomienia" aria-label="Powiadomienia">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
             </button>
@@ -44,10 +48,9 @@
         </header>
 
         <nav class="category-tabs" aria-label="Glowne kategorie">
-          <button class="category-tab active" type="button" data-category-group="food" aria-pressed="true">Jedzenie</button>
-          <button class="category-tab" type="button" data-category-group="chemistry" aria-pressed="false">Chemia</button>
-          <button class="category-tab" type="button" data-category-group="utility" aria-pressed="false">Użytkowe</button>
-          <button class="category-tab" type="button" data-category-group="other" aria-pressed="false">Inne</button>
+          <button class="category-tab active" type="button" data-category-group="food" aria-pressed="true">Spozywcze</button>
+          <button class="category-tab" type="button" data-category-group="chemistry" aria-pressed="false">Dom i chemia</button>
+          <button class="category-tab" type="button" data-category-group="utility" aria-pressed="false">Uzyteczne zapasy</button>
         </nav>
 
         <section class="stats-grid" aria-label="Podsumowanie">
@@ -130,7 +133,7 @@
                   <option>Worki i folie</option>
                   <option>Kosmetyki</option>
                 </optgroup>
-                <optgroup label="Uzyteczne i zapasy">
+                <optgroup label="Uzyteczne zapasy">
                   <option>Leki i suplementy</option>
                   <option>Artykuly dla zwierzat</option>
                   <option>Baterie</option>
@@ -161,6 +164,10 @@
                 <option value="no-expiry">Bez terminu</option>
               </select>
             </div>
+            <details class="subcategory-panel">
+              <summary>Podkategorie</summary>
+              <div id="subcategoryFilters" class="subcategory-filters"></div>
+            </details>
             <div id="alerts" class="alerts"></div>
             <div id="foodList" class="food-list"></div>
           </section>
