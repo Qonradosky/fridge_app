@@ -476,6 +476,13 @@ textarea:focus {
   gap: 12px;
 }
 
+.shopping-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .shopping-header h2 {
   font-size: 1.05rem;
 }
@@ -489,6 +496,11 @@ textarea:focus {
 .shopping-list {
   display: grid;
   gap: 8px;
+}
+
+.shopping-export {
+  min-height: 112px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
 }
 
 .shopping-item {
@@ -527,8 +539,15 @@ textarea:focus {
   border-radius: 8px;
   background: rgba(199, 130, 24, 0.15);
   color: var(--soon);
+  cursor: pointer;
   font-size: 0.92rem;
   font-weight: 700;
+}
+
+.alert:hover,
+.alert:focus {
+  outline: 2px solid rgba(199, 130, 24, 0.36);
+  outline-offset: 2px;
 }
 
 .food-list {
@@ -582,6 +601,11 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
+}
+
+.food-item.highlight {
+  border-color: var(--soon);
+  box-shadow: 0 0 0 4px rgba(199, 130, 24, 0.18);
 }
 
 .food-main {
@@ -689,6 +713,10 @@ textarea:focus {
 
   .shopping-form {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .shopping-header {
+    align-items: flex-start;
   }
 
   .food-details {

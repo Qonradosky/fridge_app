@@ -75,11 +75,13 @@ const elements = {
   filterInput: document.querySelector("#filterInput"),
   shoppingToggleButton: document.querySelector("#shoppingToggleButton"),
   seedShoppingButton: document.querySelector("#seedShoppingButton"),
+  exportShoppingButton: document.querySelector("#exportShoppingButton"),
   shoppingPanel: document.querySelector("#shoppingPanel"),
   shoppingForm: document.querySelector("#shoppingForm"),
   shoppingNameInput: document.querySelector("#shoppingNameInput"),
   shoppingAmountInput: document.querySelector("#shoppingAmountInput"),
   shoppingUnitInput: document.querySelector("#shoppingUnitInput"),
+  shoppingExportOutput: document.querySelector("#shoppingExportOutput"),
   articleSuggestions: document.querySelector("#articleSuggestions"),
   shoppingList: document.querySelector("#shoppingList"),
   subcategoryFilters: document.querySelector("#subcategoryFilters"),
@@ -125,6 +127,7 @@ function bindEvents() {
   elements.filterInput.addEventListener("change", render);
   elements.shoppingToggleButton.addEventListener("click", toggleShoppingPanel);
   elements.seedShoppingButton.addEventListener("click", seedShoppingFromProducts);
+  elements.exportShoppingButton.addEventListener("click", exportShoppingList);
   elements.shoppingForm.addEventListener("submit", handleShoppingSubmit);
 }
 
@@ -351,9 +354,18 @@ function renderAlerts(source) {
   urgent.slice(0, 3).forEach((item) => {
     const alert = document.createElement("div");
     alert.className = "alert";
+    alert.role = "button";
+    alert.tabIndex = 0;
     alert.textContent = item.status === "expired"
       ? `${item.name}: termin minal ${Math.abs(item.daysLeft)} dni temu.`
       : `${item.name}: zostalo ${item.daysLeft} dni.`;
+    alert.addEventListener("click", () => focusItemFromAlert(item));
+    alert.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        focusItemFromAlert(item);
+      }
+    });
     elements.alerts.append(alert);
   });
 }
@@ -393,6 +405,7 @@ function renderList(source) {
 
 function createFoodNode(item) {
   const node = elements.template.content.firstElementChild.cloneNode(true);
+  node.id = `item-${item.id}`;
   node.classList.add(item.status);
   node.querySelector("h3").textContent = item.name;
   node.querySelector(".food-meta").textContent = `${CATEGORY_GROUP_LABELS[item.categoryGroup]} - ${item.category} - ${formatAmount(item)} - ${formatCurrency(item.price)}`;
@@ -401,6 +414,25 @@ function createFoodNode(item) {
   node.querySelector(".shop").addEventListener("click", () => addShoppingItem(item.name, item.amount, item.unit));
   node.querySelector(".delete").addEventListener("click", () => deleteItem(item.id));
   return node;
+}
+
+function focusItemFromAlert(item) {
+  activeCategoryGroups = new Set([item.categoryGroup]);
+  activeSubcategories = new Set([item.category]);
+  syncCategoryTabs();
+  renderSubcategoryFilters();
+  render();
+
+  requestAnimationFrame(() => {
+    const target = document.querySelector(`#item-${CSS.escape(item.id)}`);
+    if (!target) return;
+
+    const group = target.closest(".food-group");
+    if (group) group.open = true;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.classList.add("highlight");
+    setTimeout(() => target.classList.remove("highlight"), 1400);
+  });
 }
 
 function groupItemsByName(source) {
@@ -546,6 +578,7 @@ function deleteShoppingItem(id) {
 
 function renderShopping() {
   renderShoppingSuggestions();
+  updateShoppingExportOutput();
   elements.shoppingList.replaceChildren();
 
   if (!shoppingItems.length) {
@@ -572,6 +605,39 @@ function renderShopping() {
     row.append(button);
     elements.shoppingList.append(row);
   });
+}
+
+async function exportShoppingList() {
+  const text = getShoppingExportText();
+  elements.shoppingExportOutput.hidden = false;
+  elements.shoppingExportOutput.value = text;
+  elements.shoppingExportOutput.focus();
+  elements.shoppingExportOutput.select();
+
+  if (!text) return;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    elements.shoppingExportOutput.value = `${text}\n\nSkopiowano do schowka.`;
+  } catch {
+    document.execCommand("copy");
+  }
+}
+
+function updateShoppingExportOutput() {
+  if (!elements.shoppingExportOutput.hidden) {
+    elements.shoppingExportOutput.value = getShoppingExportText();
+  }
+}
+
+function getShoppingExportText() {
+  if (!shoppingItems.length) return "";
+  return shoppingItems
+    .map((item) => {
+      const quantity = item.amount && item.unit ? ` - ${item.amount} ${item.unit}` : "";
+      return `- ${item.name}${quantity}`;
+    })
+    .join("\n");
 }
 
 function renderShoppingSuggestions() {

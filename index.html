@@ -189,7 +189,10 @@
             <section class="shopping-panel" id="shoppingPanel" hidden>
               <div class="shopping-header">
                 <h2>Lista zakupow</h2>
-                <button class="ghost-button" id="seedShoppingButton" type="button">Z produktow</button>
+                <div class="shopping-actions">
+                  <button class="ghost-button" id="seedShoppingButton" type="button">Z produktow</button>
+                  <button class="ghost-button" id="exportShoppingButton" type="button">Eksport</button>
+                </div>
               </div>
               <form id="shoppingForm" class="shopping-form">
                 <input id="shoppingNameInput" list="articleSuggestions" placeholder="np. Mleko" required />
@@ -202,6 +205,7 @@
                 <button class="primary-button" type="submit">Dodaj</button>
               </form>
               <datalist id="articleSuggestions"></datalist>
+              <textarea id="shoppingExportOutput" class="shopping-export" rows="5" readonly hidden></textarea>
               <div id="shoppingList" class="shopping-list"></div>
             </section>
             <div id="alerts" class="alerts"></div>
