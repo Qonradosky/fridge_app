@@ -1,4 +1,4 @@
-const CACHE_NAME = "virtual-fridge-v4";
+const CACHE_NAME = "virtual-fridge-v5";
 const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {

@@ -242,6 +242,33 @@ textarea:focus {
   gap: 10px;
 }
 
+.category-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 34px rgba(41, 58, 45, 0.06);
+}
+
+.category-tab {
+  min-height: 46px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.category-tab:hover,
+.category-tab.active {
+  background: var(--primary);
+  color: #fff;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -458,11 +485,16 @@ textarea:focus {
   }
 
   .stats-grid,
+  .category-tabs,
   .workspace {
     grid-template-columns: 1fr;
   }
 
   .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .category-tabs {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -479,7 +511,8 @@ textarea:focus {
   .pin-row,
   .form-grid,
   .list-toolbar,
-  .stats-grid {
+  .stats-grid,
+  .category-tabs {
     grid-template-columns: 1fr;
   }
 

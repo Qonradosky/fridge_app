@@ -2,6 +2,31 @@ const STORAGE_KEY = "virtual-fridge-items";
 const PIN_KEY = "virtual-fridge-pin";
 const SESSION_KEY = "virtual-fridge-unlocked";
 const SOON_DAYS = 3;
+const CATEGORY_GROUPS = {
+  food: [
+    "Nabial",
+    "Warzywa",
+    "Owoce",
+    "Mieso",
+    "Ryby",
+    "Pieczywo",
+    "Produkty suche",
+    "Konserwy",
+    "Mrozonki",
+    "Gotowe dania",
+    "Napoje",
+    "Przyprawy",
+    "Slodycze i przekaski",
+  ],
+  chemistry: ["Chemia gospodarcza", "Sprzatanie", "Higiena", "Papierowe", "Worki i folie", "Kosmetyki"],
+  utility: ["Leki i suplementy", "Artykuly dla zwierzat", "Baterie", "Narzedzia i drobiazgi", "Inne zapasy"],
+};
+const CATEGORY_GROUP_LABELS = {
+  food: "Jedzenie",
+  chemistry: "Chemia",
+  utility: "Użytkowe",
+  other: "Inne",
+};
 
 const initialItems = [
   {
@@ -36,6 +61,7 @@ const elements = {
   pinHint: document.querySelector("#pinHint"),
   lockButton: document.querySelector("#lockButton"),
   notifyButton: document.querySelector("#notifyButton"),
+  categoryTabs: document.querySelectorAll(".category-tab"),
   foodForm: document.querySelector("#foodForm"),
   foodId: document.querySelector("#foodId"),
   formTitle: document.querySelector("#formTitle"),
@@ -60,6 +86,7 @@ const elements = {
 };
 
 let items = loadItems();
+let activeCategoryGroup = "food";
 
 setup();
 
@@ -78,6 +105,7 @@ function bindEvents() {
   elements.foodForm.addEventListener("submit", handleFoodSubmit);
   elements.cancelEditButton.addEventListener("click", resetForm);
   elements.noExpirationInput.addEventListener("change", syncExpirationField);
+  elements.categoryTabs.forEach((tab) => tab.addEventListener("click", handleCategoryTabClick));
   elements.searchInput.addEventListener("input", render);
   elements.filterInput.addEventListener("change", render);
 }
@@ -144,6 +172,16 @@ function showFridge() {
 function lockApp() {
   sessionStorage.removeItem(SESSION_KEY);
   showAuth();
+}
+
+function handleCategoryTabClick(event) {
+  activeCategoryGroup = event.currentTarget.dataset.categoryGroup;
+  elements.categoryTabs.forEach((tab) => {
+    const isActive = tab.dataset.categoryGroup === activeCategoryGroup;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-pressed", String(isActive));
+  });
+  render();
 }
 
 function handleFoodSubmit(event) {
@@ -216,12 +254,17 @@ function deleteItem(id) {
 
 function render() {
   const enriched = items
-    .map((item) => ({ ...item, status: getStatus(item), daysLeft: getDaysLeft(item.expirationDate) }))
+    .map((item) => ({
+      ...item,
+      categoryGroup: getCategoryGroup(item.category),
+      status: getStatus(item),
+      daysLeft: getDaysLeft(item.expirationDate),
+    }))
     .sort((a, b) => getSortDate(a.expirationDate) - getSortDate(b.expirationDate));
   const filtered = filterItems(enriched);
 
-  renderStats(enriched);
-  renderAlerts(enriched);
+  renderStats(filtered);
+  renderAlerts(filtered);
   renderList(filtered);
 }
 
@@ -261,7 +304,7 @@ function renderList(source) {
     const node = elements.template.content.firstElementChild.cloneNode(true);
     node.classList.add(item.status);
     node.querySelector("h3").textContent = item.name;
-    node.querySelector(".food-meta").textContent = `${item.category} - ${item.weight} g/ml - ${formatCurrency(item.price)}`;
+    node.querySelector(".food-meta").textContent = `${CATEGORY_GROUP_LABELS[item.categoryGroup]} - ${item.category} - ${item.weight} g/ml - ${formatCurrency(item.price)}`;
     node.querySelector(".food-details").textContent = getStatusText(item);
     node.querySelector(".edit").addEventListener("click", () => editItem(item.id));
     node.querySelector(".delete").addEventListener("click", () => deleteItem(item.id));
@@ -276,8 +319,14 @@ function filterItems(source) {
   return source.filter((item) => {
     const matchesQuery = [item.name, item.category, item.notes].some((field) => field.toLowerCase().includes(query));
     const matchesFilter = filter === "all" || item.status === filter;
-    return matchesQuery && matchesFilter;
+    const matchesCategoryGroup = item.categoryGroup === activeCategoryGroup;
+    return matchesQuery && matchesFilter && matchesCategoryGroup;
   });
+}
+
+function getCategoryGroup(category) {
+  const group = Object.entries(CATEGORY_GROUPS).find(([, categories]) => categories.includes(category));
+  return group ? group[0] : "other";
 }
 
 function getStatus(item) {
