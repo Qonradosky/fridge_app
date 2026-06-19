@@ -212,6 +212,11 @@ textarea:focus {
   font-weight: 800;
 }
 
+.ghost-button.active {
+  background: var(--primary);
+  color: var(--panel);
+}
+
 .icon-button {
   display: inline-grid;
   width: 42px;
@@ -415,6 +420,12 @@ textarea:focus {
   gap: 12px;
 }
 
+.unit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 8px;
+}
+
 .list-panel {
   min-height: 420px;
   padding: 16px;
@@ -444,6 +455,67 @@ textarea:focus {
   width: 170px;
 }
 
+.toolbar-button {
+  min-width: 126px;
+}
+
+.shopping-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.shopping-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shopping-header h2 {
+  font-size: 1.05rem;
+}
+
+.shopping-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 100px 120px auto;
+  gap: 8px;
+}
+
+.shopping-list {
+  display: grid;
+  gap: 8px;
+}
+
+.shopping-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--input-bg);
+}
+
+.shopping-item span {
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+.shopping-empty {
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .alerts {
   display: grid;
   gap: 8px;
@@ -462,6 +534,43 @@ textarea:focus {
 .food-list {
   display: grid;
   gap: 10px;
+}
+
+.food-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.food-group summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 50px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.food-group summary strong,
+.food-group summary span {
+  overflow-wrap: anywhere;
+}
+
+.food-group summary span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.food-group-list {
+  display: grid;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.food-group .food-item {
+  box-shadow: none;
 }
 
 .food-item {
@@ -502,6 +611,10 @@ textarea:focus {
   background: var(--blue);
 }
 
+.food-item.frozen .status-dot {
+  background: #5d8df0;
+}
+
 .food-main h3 {
   overflow-wrap: anywhere;
   font-size: 1.05rem;
@@ -525,6 +638,10 @@ textarea:focus {
 
 .food-actions .delete {
   color: var(--expired);
+}
+
+.food-actions .shop {
+  color: var(--blue);
 }
 
 .empty-state {
@@ -570,6 +687,10 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
+  .shopping-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .food-details {
     text-align: left;
   }
@@ -578,7 +699,9 @@ textarea:focus {
 @media (max-width: 520px) {
   .pin-row,
   .form-grid,
+  .unit-row,
   .list-toolbar,
+  .shopping-form,
   .stats-grid,
   .category-tabs {
     grid-template-columns: 1fr;

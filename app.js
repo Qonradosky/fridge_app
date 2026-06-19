@@ -1,8 +1,10 @@
 const STORAGE_KEY = "virtual-fridge-items";
+const SHOPPING_KEY = "virtual-fridge-shopping-items";
 const PIN_KEY = "virtual-fridge-pin";
 const SESSION_KEY = "virtual-fridge-unlocked";
 const THEME_KEY = "virtual-fridge-theme";
 const SOON_DAYS = 3;
+
 const CATEGORY_GROUPS = {
   food: [
     "Nabial",
@@ -20,8 +22,9 @@ const CATEGORY_GROUPS = {
     "Slodycze i przekaski",
   ],
   chemistry: ["Chemia gospodarcza", "Sprzatanie", "Higiena", "Papierowe", "Worki i folie", "Kosmetyki"],
-  utility: ["Leki i suplementy", "Artykuly dla zwierzat", "Baterie", "Narzedzia i drobiazgi", "Inne zapasy"],
+  utility: ["Leki i suplementy", "Artykuly dla zwierzat", "Baterie", "Narzedzia i drobiazgi", "Inne zapasy", "Inne"],
 };
+
 const CATEGORY_GROUP_LABELS = {
   food: "Spozywcze",
   chemistry: "Dom i chemia",
@@ -29,28 +32,18 @@ const CATEGORY_GROUP_LABELS = {
 };
 
 const initialItems = [
-  {
-    id: crypto.randomUUID(),
-    name: "Jogurt naturalny",
-    price: 3.49,
-    purchaseDate: toInputDate(new Date()),
-    expirationDate: offsetDate(2),
-    weight: 400,
-    category: "Nabial",
-    notes: "Do sniadan",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: crypto.randomUUID(),
-    name: "Pomidory malinowe",
-    price: 8.2,
-    purchaseDate: toInputDate(new Date()),
-    expirationDate: offsetDate(5),
-    weight: 700,
-    category: "Warzywa",
-    notes: "",
-    createdAt: new Date().toISOString(),
-  },
+  createSeedItem("Jogurt naturalny", 3.49, -2, 2, 400, "g/ml", "Nabial", "Do sniadan"),
+  createSeedItem("Pomidory malinowe", 8.2, -1, 5, 700, "g/ml", "Warzywa", ""),
+  createSeedItem("Mleko 2%", 4.29, -4, 3, 1, "szt", "Nabial", "Karton"),
+  createSeedItem("Mleko 2%", 4.49, -1, 9, 1, "szt", "Nabial", "Do kawy"),
+  createSeedItem("Jajka", 11.99, -3, 12, 10, "szt", "Nabial", "Rozmiar M"),
+  createSeedItem("Chleb zytni", 6.5, -1, 1, 1, "szt", "Pieczywo", ""),
+  createSeedItem("Pierogi ruskie", 13.99, -10, 25, 450, "g/ml", "Mrozonki", "Awaryjny obiad", true, -8),
+  createSeedItem("Kurczak filet", 18.4, -12, 35, 600, "g/ml", "Mieso", "Porcjowany", true, -11),
+  createSeedItem("Plyn do naczyn", 7.99, -7, null, 1, "szt", "Chemia gospodarcza", "Cytrynowy"),
+  createSeedItem("Worki na smieci", 12.49, -20, null, 1, "szt", "Worki i folie", "60 l"),
+  createSeedItem("Baterie AA", 16.99, -30, null, 8, "szt", "Baterie", ""),
+  createSeedItem("Witamina D", 22.9, -14, 160, 1, "szt", "Leki i suplementy", "Po sniadaniu"),
 ];
 
 const elements = {
@@ -70,13 +63,25 @@ const elements = {
   nameInput: document.querySelector("#nameInput"),
   priceInput: document.querySelector("#priceInput"),
   weightInput: document.querySelector("#weightInput"),
+  unitInput: document.querySelector("#unitInput"),
   purchaseDateInput: document.querySelector("#purchaseDateInput"),
   expirationDateInput: document.querySelector("#expirationDateInput"),
   noExpirationInput: document.querySelector("#noExpirationInput"),
+  frozenInput: document.querySelector("#frozenInput"),
+  frozenDateInput: document.querySelector("#frozenDateInput"),
   categoryInput: document.querySelector("#categoryInput"),
   notesInput: document.querySelector("#notesInput"),
   searchInput: document.querySelector("#searchInput"),
   filterInput: document.querySelector("#filterInput"),
+  shoppingToggleButton: document.querySelector("#shoppingToggleButton"),
+  seedShoppingButton: document.querySelector("#seedShoppingButton"),
+  shoppingPanel: document.querySelector("#shoppingPanel"),
+  shoppingForm: document.querySelector("#shoppingForm"),
+  shoppingNameInput: document.querySelector("#shoppingNameInput"),
+  shoppingAmountInput: document.querySelector("#shoppingAmountInput"),
+  shoppingUnitInput: document.querySelector("#shoppingUnitInput"),
+  articleSuggestions: document.querySelector("#articleSuggestions"),
+  shoppingList: document.querySelector("#shoppingList"),
   subcategoryFilters: document.querySelector("#subcategoryFilters"),
   alerts: document.querySelector("#alerts"),
   foodList: document.querySelector("#foodList"),
@@ -88,6 +93,7 @@ const elements = {
 };
 
 let items = loadItems();
+let shoppingItems = loadShoppingItems();
 let activeCategoryGroups = new Set(["food"]);
 let activeSubcategories = new Set();
 
@@ -97,8 +103,10 @@ function setup() {
   applySavedTheme();
   elements.purchaseDateInput.value = toInputDate(new Date());
   elements.expirationDateInput.value = offsetDate(7);
+  elements.frozenDateInput.value = toInputDate(new Date());
   bindEvents();
   renderSubcategoryFilters();
+  renderShopping();
   showInitialView();
   registerServiceWorker();
 }
@@ -111,9 +119,13 @@ function bindEvents() {
   elements.foodForm.addEventListener("submit", handleFoodSubmit);
   elements.cancelEditButton.addEventListener("click", resetForm);
   elements.noExpirationInput.addEventListener("change", syncExpirationField);
+  elements.frozenInput.addEventListener("change", syncFrozenField);
   elements.categoryTabs.forEach((tab) => tab.addEventListener("click", handleCategoryTabClick));
   elements.searchInput.addEventListener("input", render);
   elements.filterInput.addEventListener("change", render);
+  elements.shoppingToggleButton.addEventListener("click", toggleShoppingPanel);
+  elements.seedShoppingButton.addEventListener("click", seedShoppingFromProducts);
+  elements.shoppingForm.addEventListener("submit", handleShoppingSubmit);
 }
 
 function showInitialView() {
@@ -220,15 +232,19 @@ function handleFoodSubmit(event) {
   event.preventDefault();
   const id = elements.foodId.value || crypto.randomUUID();
   const noExpiration = elements.noExpirationInput.checked;
+  const isFrozen = elements.frozenInput.checked;
   const payload = {
     id,
     name: elements.nameInput.value.trim(),
     price: Number(elements.priceInput.value),
     purchaseDate: elements.purchaseDateInput.value,
     expirationDate: noExpiration ? null : elements.expirationDateInput.value,
-    weight: Number(elements.weightInput.value),
+    amount: Number(elements.weightInput.value),
+    unit: elements.unitInput.value,
     category: elements.categoryInput.value,
     notes: elements.notesInput.value.trim(),
+    isFrozen,
+    frozenDate: isFrozen ? elements.frozenDateInput.value : "",
     createdAt: items.find((item) => item.id === id)?.createdAt || new Date().toISOString(),
   };
 
@@ -238,13 +254,21 @@ function handleFoodSubmit(event) {
     return;
   }
 
+  if (isFrozen && new Date(payload.frozenDate) < new Date(payload.purchaseDate)) {
+    elements.frozenDateInput.setCustomValidity("Data zamrozenia nie moze byc przed data zakupu.");
+    elements.frozenDateInput.reportValidity();
+    return;
+  }
+
   elements.expirationDateInput.setCustomValidity("");
+  elements.frozenDateInput.setCustomValidity("");
   items = items.some((item) => item.id === id)
     ? items.map((item) => (item.id === id ? payload : item))
     : [payload, ...items];
   saveItems();
   resetForm();
   render();
+  renderShopping();
 }
 
 function resetForm() {
@@ -254,8 +278,12 @@ function resetForm() {
   elements.cancelEditButton.hidden = true;
   elements.purchaseDateInput.value = toInputDate(new Date());
   elements.expirationDateInput.value = offsetDate(7);
+  elements.frozenDateInput.value = toInputDate(new Date());
   elements.noExpirationInput.checked = false;
+  elements.frozenInput.checked = false;
+  elements.unitInput.value = "g/ml";
   syncExpirationField();
+  syncFrozenField();
   elements.categoryInput.value = "Nabial";
 }
 
@@ -266,11 +294,15 @@ function editItem(id) {
   elements.foodId.value = item.id;
   elements.nameInput.value = item.name;
   elements.priceInput.value = item.price;
-  elements.weightInput.value = item.weight;
+  elements.weightInput.value = item.amount;
+  elements.unitInput.value = item.unit;
   elements.purchaseDateInput.value = item.purchaseDate;
   elements.noExpirationInput.checked = !item.expirationDate;
   elements.expirationDateInput.value = item.expirationDate || offsetDate(7);
+  elements.frozenInput.checked = item.isFrozen;
+  elements.frozenDateInput.value = item.frozenDate || toInputDate(new Date());
   syncExpirationField();
+  syncFrozenField();
   elements.categoryInput.value = item.category;
   elements.notesInput.value = item.notes;
   elements.formTitle.textContent = "Edytuj produkt";
@@ -282,10 +314,20 @@ function deleteItem(id) {
   items = items.filter((item) => item.id !== id);
   saveItems();
   render();
+  renderShopping();
 }
 
 function render() {
-  const enriched = items
+  const enriched = getEnrichedItems();
+  const filtered = filterItems(enriched);
+
+  renderStats(filtered);
+  renderAlerts(filtered);
+  renderList(filtered);
+}
+
+function getEnrichedItems() {
+  return items
     .map((item) => ({
       ...item,
       categoryGroup: getCategoryGroup(item.category),
@@ -293,11 +335,6 @@ function render() {
       daysLeft: getDaysLeft(item.expirationDate),
     }))
     .sort((a, b) => getSortDate(a.expirationDate) - getSortDate(b.expirationDate));
-  const filtered = filterItems(enriched);
-
-  renderStats(filtered);
-  renderAlerts(filtered);
-  renderList(filtered);
 }
 
 function renderStats(source) {
@@ -332,16 +369,52 @@ function renderList(source) {
     return;
   }
 
-  source.forEach((item) => {
-    const node = elements.template.content.firstElementChild.cloneNode(true);
-    node.classList.add(item.status);
-    node.querySelector("h3").textContent = item.name;
-    node.querySelector(".food-meta").textContent = `${CATEGORY_GROUP_LABELS[item.categoryGroup] || "Uzyteczne zapasy"} - ${item.category} - ${item.weight} g/ml - ${formatCurrency(item.price)}`;
-    node.querySelector(".food-details").textContent = getStatusText(item);
-    node.querySelector(".edit").addEventListener("click", () => editItem(item.id));
-    node.querySelector(".delete").addEventListener("click", () => deleteItem(item.id));
-    elements.foodList.append(node);
+  groupItemsByName(source).forEach((group) => {
+    if (group.items.length === 1) {
+      elements.foodList.append(createFoodNode(group.items[0]));
+      return;
+    }
+
+    const details = document.createElement("details");
+    details.className = "food-group";
+    details.open = true;
+
+    const summary = document.createElement("summary");
+    summary.innerHTML = `<strong>${group.name}</strong><span>${group.items.length} wpisy - ${formatCurrency(group.totalValue)}</span>`;
+    details.append(summary);
+
+    const list = document.createElement("div");
+    list.className = "food-group-list";
+    group.items.forEach((item) => list.append(createFoodNode(item)));
+    details.append(list);
+    elements.foodList.append(details);
   });
+}
+
+function createFoodNode(item) {
+  const node = elements.template.content.firstElementChild.cloneNode(true);
+  node.classList.add(item.status);
+  node.querySelector("h3").textContent = item.name;
+  node.querySelector(".food-meta").textContent = `${CATEGORY_GROUP_LABELS[item.categoryGroup]} - ${item.category} - ${formatAmount(item)} - ${formatCurrency(item.price)}`;
+  node.querySelector(".food-details").textContent = getStatusText(item);
+  node.querySelector(".edit").addEventListener("click", () => editItem(item.id));
+  node.querySelector(".shop").addEventListener("click", () => addShoppingItem(item.name, item.amount, item.unit));
+  node.querySelector(".delete").addEventListener("click", () => deleteItem(item.id));
+  return node;
+}
+
+function groupItemsByName(source) {
+  const groups = new Map();
+  source.forEach((item) => {
+    const key = item.name.trim().toLowerCase();
+    if (!groups.has(key)) {
+      groups.set(key, { name: item.name, items: [], totalValue: 0 });
+    }
+    const group = groups.get(key);
+    group.items.push(item);
+    group.totalValue += item.price;
+  });
+  return [...groups.values()];
 }
 
 function filterItems(source) {
@@ -393,26 +466,8 @@ function getSelectedGroupCategories() {
   return groups.flatMap((group) => CATEGORY_GROUPS[group] || []);
 }
 
-function applySavedTheme() {
-  const savedTheme = localStorage.getItem(THEME_KEY);
-  setTheme(savedTheme === "dark" ? "dark" : "light");
-}
-
-function toggleTheme() {
-  const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  localStorage.setItem(THEME_KEY, nextTheme);
-  setTheme(nextTheme);
-}
-
-function setTheme(theme) {
-  const isDark = theme === "dark";
-  document.documentElement.dataset.theme = theme;
-  elements.themeToggleButton.setAttribute("aria-pressed", String(isDark));
-  elements.themeToggleButton.setAttribute("title", isDark ? "Tryb jasny" : "Tryb ciemny");
-  elements.themeToggleButton.setAttribute("aria-label", isDark ? "Tryb jasny" : "Tryb ciemny");
-}
-
 function getStatus(item) {
+  if (item.isFrozen) return "frozen";
   if (!item.expirationDate) return "no-expiry";
   const daysLeft = getDaysLeft(item.expirationDate);
   if (daysLeft < 0) return "expired";
@@ -421,24 +476,12 @@ function getStatus(item) {
 }
 
 function getStatusText(item) {
-  if (item.status === "no-expiry") return "Bez terminu waznosci";
-  if (item.status === "expired") return `Po terminie od ${Math.abs(item.daysLeft)} dni`;
-  if (item.daysLeft === 0) return "Termin mija dzisiaj";
-  if (item.status === "soon") return `Zostalo ${item.daysLeft} dni`;
-  return `Wazne do ${formatDate(item.expirationDate)}`;
-}
-
-function getDaysLeft(dateValue) {
-  if (!dateValue) return null;
-  const today = new Date();
-  const target = new Date(dateValue);
-  today.setHours(0, 0, 0, 0);
-  target.setHours(0, 0, 0, 0);
-  return Math.ceil((target - today) / 86400000);
-}
-
-function getSortDate(dateValue) {
-  return dateValue ? new Date(dateValue).getTime() : Number.MAX_SAFE_INTEGER;
+  if (item.status === "frozen") return `Zamrozone ${formatDate(item.frozenDate)} - kupione ${formatDate(item.purchaseDate)}`;
+  if (item.status === "no-expiry") return `Bez terminu - kupione ${formatDate(item.purchaseDate)}`;
+  if (item.status === "expired") return `Po terminie od ${Math.abs(item.daysLeft)} dni - kupione ${formatDate(item.purchaseDate)}`;
+  if (item.daysLeft === 0) return `Termin mija dzisiaj - kupione ${formatDate(item.purchaseDate)}`;
+  if (item.status === "soon") return `Zostalo ${item.daysLeft} dni - kupione ${formatDate(item.purchaseDate)}`;
+  return `Wazne do ${formatDate(item.expirationDate)} - kupione ${formatDate(item.purchaseDate)}`;
 }
 
 function syncExpirationField() {
@@ -446,6 +489,102 @@ function syncExpirationField() {
   elements.expirationDateInput.disabled = disabled;
   elements.expirationDateInput.required = !disabled;
   elements.expirationDateInput.setCustomValidity("");
+}
+
+function syncFrozenField() {
+  const enabled = elements.frozenInput.checked;
+  elements.frozenDateInput.disabled = !enabled;
+  elements.frozenDateInput.required = enabled;
+  if (enabled && !elements.frozenDateInput.value) {
+    elements.frozenDateInput.value = toInputDate(new Date());
+  }
+  elements.frozenDateInput.setCustomValidity("");
+}
+
+function toggleShoppingPanel() {
+  elements.shoppingPanel.hidden = !elements.shoppingPanel.hidden;
+  elements.shoppingToggleButton.classList.toggle("active", !elements.shoppingPanel.hidden);
+}
+
+function handleShoppingSubmit(event) {
+  event.preventDefault();
+  addShoppingItem(
+    elements.shoppingNameInput.value.trim(),
+    Number(elements.shoppingAmountInput.value) || null,
+    elements.shoppingUnitInput.value,
+  );
+  elements.shoppingForm.reset();
+}
+
+function seedShoppingFromProducts() {
+  const existing = new Set(shoppingItems.map((item) => item.name.toLowerCase()));
+  getUniqueArticles().forEach((name) => {
+    if (!existing.has(name.toLowerCase())) {
+      shoppingItems.push({ id: crypto.randomUUID(), name, amount: null, unit: "" });
+    }
+  });
+  saveShoppingItems();
+  renderShopping();
+  elements.shoppingPanel.hidden = false;
+  elements.shoppingToggleButton.classList.add("active");
+}
+
+function addShoppingItem(name, amount = null, unit = "") {
+  if (!name) return;
+  shoppingItems = [{ id: crypto.randomUUID(), name, amount, unit }, ...shoppingItems];
+  saveShoppingItems();
+  renderShopping();
+  elements.shoppingPanel.hidden = false;
+  elements.shoppingToggleButton.classList.add("active");
+}
+
+function deleteShoppingItem(id) {
+  shoppingItems = shoppingItems.filter((item) => item.id !== id);
+  saveShoppingItems();
+  renderShopping();
+}
+
+function renderShopping() {
+  renderShoppingSuggestions();
+  elements.shoppingList.replaceChildren();
+
+  if (!shoppingItems.length) {
+    const empty = document.createElement("div");
+    empty.className = "shopping-empty";
+    empty.textContent = "Lista zakupow jest pusta.";
+    elements.shoppingList.append(empty);
+    return;
+  }
+
+  shoppingItems.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "shopping-item";
+    const quantity = item.amount && item.unit ? ` - ${item.amount} ${item.unit}` : "";
+    row.innerHTML = `<span>${item.name}${quantity}</span>`;
+
+    const button = document.createElement("button");
+    button.className = "icon-button delete";
+    button.type = "button";
+    button.title = "Usun z listy";
+    button.setAttribute("aria-label", "Usun z listy");
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path></svg>';
+    button.addEventListener("click", () => deleteShoppingItem(item.id));
+    row.append(button);
+    elements.shoppingList.append(row);
+  });
+}
+
+function renderShoppingSuggestions() {
+  elements.articleSuggestions.replaceChildren();
+  getUniqueArticles().forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    elements.articleSuggestions.append(option);
+  });
+}
+
+function getUniqueArticles() {
+  return [...new Set(items.map((item) => item.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
 }
 
 async function requestNotifications() {
@@ -479,14 +618,45 @@ function maybeShowExpiryNotification(force = false) {
   localStorage.setItem(todayKey, "true");
 }
 
+function applySavedTheme() {
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  setTheme(savedTheme === "dark" ? "dark" : "light");
+}
+
+function toggleTheme() {
+  const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, nextTheme);
+  setTheme(nextTheme);
+}
+
+function setTheme(theme) {
+  const isDark = theme === "dark";
+  document.documentElement.dataset.theme = theme;
+  elements.themeToggleButton.setAttribute("aria-pressed", String(isDark));
+  elements.themeToggleButton.setAttribute("title", isDark ? "Tryb jasny" : "Tryb ciemny");
+  elements.themeToggleButton.setAttribute("aria-label", isDark ? "Tryb jasny" : "Tryb ciemny");
+}
+
 function loadItems() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return initialItems;
+  if (!saved) return initialItems.map(normalizeItem);
+
+  try {
+    const parsed = JSON.parse(saved).map(normalizeItem);
+    return parsed.length < 6 ? mergeSeedItems(parsed) : parsed;
+  } catch {
+    return initialItems.map(normalizeItem);
+  }
+}
+
+function loadShoppingItems() {
+  const saved = localStorage.getItem(SHOPPING_KEY);
+  if (!saved) return [];
 
   try {
     return JSON.parse(saved);
   } catch {
-    return initialItems;
+    return [];
   }
 }
 
@@ -494,11 +664,70 @@ function saveItems() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
+function saveShoppingItems() {
+  localStorage.setItem(SHOPPING_KEY, JSON.stringify(shoppingItems));
+}
+
+function normalizeItem(item) {
+  const amount = Number(item.amount ?? item.weight ?? 1);
+  const isFrozen = Boolean(item.isFrozen);
+  return {
+    ...item,
+    amount,
+    unit: item.unit || "g/ml",
+    isFrozen,
+    frozenDate: isFrozen ? item.frozenDate || item.purchaseDate : "",
+  };
+}
+
+function mergeSeedItems(existingItems) {
+  const existingKeys = new Set(existingItems.map((item) => `${item.name.toLowerCase()}-${item.category}`));
+  const extras = initialItems
+    .map(normalizeItem)
+    .filter((item) => !existingKeys.has(`${item.name.toLowerCase()}-${item.category}`));
+  return [...existingItems, ...extras];
+}
+
+function createSeedItem(name, price, purchaseOffset, expiryOffset, amount, unit, category, notes, isFrozen = false, frozenOffset = null) {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    price,
+    purchaseDate: offsetDate(purchaseOffset),
+    expirationDate: expiryOffset === null ? null : offsetDate(expiryOffset),
+    amount,
+    unit,
+    category,
+    notes,
+    isFrozen,
+    frozenDate: isFrozen ? offsetDate(frozenOffset ?? purchaseOffset) : "",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function getDaysLeft(dateValue) {
+  if (!dateValue) return null;
+  const today = new Date();
+  const target = new Date(dateValue);
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target - today) / 86400000);
+}
+
+function getSortDate(dateValue) {
+  return dateValue ? new Date(dateValue).getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function formatAmount(item) {
+  return `${item.amount} ${item.unit}`;
+}
+
 function formatCurrency(value) {
   return new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN" }).format(value);
 }
 
 function formatDate(dateValue) {
+  if (!dateValue) return "brak daty";
   return new Intl.DateTimeFormat("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(dateValue));
 }
 
