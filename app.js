@@ -2,6 +2,7 @@ const STORAGE_KEY = "virtual-fridge-items";
 const SHOPPING_KEY = "virtual-fridge-shopping-items";
 const PIN_KEY = "virtual-fridge-pin";
 const SESSION_KEY = "virtual-fridge-unlocked";
+const HOUSEHOLD_KEY = "virtual-fridge-household-id";
 const THEME_KEY = "virtual-fridge-theme";
 const SOON_DAYS = 3;
 
@@ -52,6 +53,13 @@ const elements = {
   pinForm: document.querySelector("#pinForm"),
   pinInput: document.querySelector("#pinInput"),
   pinHint: document.querySelector("#pinHint"),
+  cloudAuthForm: document.querySelector("#cloudAuthForm"),
+  emailInput: document.querySelector("#emailInput"),
+  passwordInput: document.querySelector("#passwordInput"),
+  householdCodeInput: document.querySelector("#householdCodeInput"),
+  signInButton: document.querySelector("#signInButton"),
+  signUpButton: document.querySelector("#signUpButton"),
+  cloudAuthHint: document.querySelector("#cloudAuthHint"),
   lockButton: document.querySelector("#lockButton"),
   notifyButton: document.querySelector("#notifyButton"),
   themeToggleButton: document.querySelector("#themeToggleButton"),
@@ -98,10 +106,13 @@ let items = loadItems();
 let shoppingItems = loadShoppingItems();
 let activeCategoryGroups = new Set(["food"]);
 let activeSubcategories = new Set();
+let supabaseClient = null;
+let householdId = localStorage.getItem(HOUSEHOLD_KEY) || "";
+let useCloud = false;
 
 setup();
 
-function setup() {
+async function setup() {
   applySavedTheme();
   elements.purchaseDateInput.value = toInputDate(new Date());
   elements.expirationDateInput.value = offsetDate(7);
@@ -109,12 +120,15 @@ function setup() {
   bindEvents();
   renderSubcategoryFilters();
   renderShopping();
-  showInitialView();
+  await initializeCloud();
+  await showInitialView();
   registerServiceWorker();
 }
 
 function bindEvents() {
   elements.pinForm.addEventListener("submit", handlePinSubmit);
+  elements.signInButton.addEventListener("click", () => handleCloudAuth("signin"));
+  elements.signUpButton.addEventListener("click", () => handleCloudAuth("signup"));
   elements.lockButton.addEventListener("click", lockApp);
   elements.notifyButton.addEventListener("click", requestNotifications);
   elements.themeToggleButton.addEventListener("click", toggleTheme);
@@ -131,7 +145,54 @@ function bindEvents() {
   elements.shoppingForm.addEventListener("submit", handleShoppingSubmit);
 }
 
-function showInitialView() {
+async function initializeCloud() {
+  const config = window.SUPABASE_CONFIG || {};
+  useCloud = Boolean(config.url && config.anonKey);
+
+  if (!useCloud) {
+    elements.pinForm.hidden = false;
+    elements.cloudAuthForm.hidden = true;
+    return;
+  }
+
+  elements.pinForm.hidden = true;
+  elements.cloudAuthForm.hidden = false;
+
+  try {
+    const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+    supabaseClient = createClient(config.url, config.anonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+      },
+    });
+  } catch (error) {
+    useCloud = false;
+    elements.pinForm.hidden = false;
+    elements.cloudAuthForm.hidden = true;
+    elements.pinHint.textContent = "Nie udalo sie zaladowac Supabase. Dziala tryb lokalny.";
+    console.error(error);
+  }
+}
+
+async function showInitialView() {
+  if (useCloud) {
+    const { data } = await supabaseClient.auth.getSession();
+    if (data.session) {
+      await ensureHouseholdAfterLogin();
+      if (householdId) {
+        await loadCloudData();
+        showFridge();
+        return;
+      }
+    }
+
+    elements.cloudAuthHint.textContent = "Zaloguj sie i wpisz wspolny kod domu.";
+    showAuth();
+    return;
+  }
+
   const hasPin = Boolean(localStorage.getItem(PIN_KEY));
   const unlocked = sessionStorage.getItem(SESSION_KEY) === "true";
 
@@ -176,11 +237,68 @@ function handlePinSubmit(event) {
   elements.pinHint.textContent = "Niepoprawny kod.";
 }
 
+async function handleCloudAuth(mode) {
+  const email = elements.emailInput.value.trim();
+  const password = elements.passwordInput.value;
+  const inviteCode = normalizeInviteCode(elements.householdCodeInput.value);
+
+  if (!email || !password || !inviteCode) {
+    elements.cloudAuthHint.textContent = "Podaj email, haslo i kod domu.";
+    return;
+  }
+
+  elements.cloudAuthHint.textContent = "Lacze z Supabase...";
+
+  try {
+    if (mode === "signup") {
+      const { error } = await supabaseClient.auth.signUp({ email, password });
+      if (error && !String(error.message).toLowerCase().includes("already")) throw error;
+      await supabaseClient.auth.signInWithPassword({ email, password });
+    } else {
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    }
+
+    await joinOrCreateHousehold(inviteCode);
+    await migrateLocalDataToCloud();
+    await loadCloudData();
+    showFridge();
+  } catch (error) {
+    elements.cloudAuthHint.textContent = `Blad logowania: ${error.message}`;
+  }
+}
+
+async function ensureHouseholdAfterLogin() {
+  if (householdId) return;
+  const inviteCode = normalizeInviteCode(elements.householdCodeInput.value);
+  if (!inviteCode) return;
+  await joinOrCreateHousehold(inviteCode);
+}
+
+async function joinOrCreateHousehold(inviteCode) {
+  let result = await supabaseClient.rpc("join_household", { household_invite_code: inviteCode });
+
+  if (result.error) {
+    result = await supabaseClient.rpc("create_household", {
+      household_name: "Dom",
+      household_invite_code: inviteCode,
+    });
+  }
+
+  if (result.error) throw result.error;
+  householdId = result.data;
+  localStorage.setItem(HOUSEHOLD_KEY, householdId);
+}
+
 function showAuth() {
   elements.fridgeView.hidden = true;
   elements.authView.hidden = false;
   elements.pinInput.value = "";
-  elements.pinInput.focus();
+  if (useCloud) {
+    elements.emailInput.focus();
+  } else {
+    elements.pinInput.focus();
+  }
 }
 
 function showFridge() {
@@ -190,7 +308,15 @@ function showFridge() {
   maybeShowExpiryNotification();
 }
 
-function lockApp() {
+async function lockApp() {
+  if (useCloud) {
+    await supabaseClient.auth.signOut();
+    householdId = "";
+    localStorage.removeItem(HOUSEHOLD_KEY);
+    showAuth();
+    return;
+  }
+
   sessionStorage.removeItem(SESSION_KEY);
   showAuth();
 }
@@ -231,7 +357,7 @@ function syncCategoryTabs() {
   });
 }
 
-function handleFoodSubmit(event) {
+async function handleFoodSubmit(event) {
   event.preventDefault();
   const id = elements.foodId.value || crypto.randomUUID();
   const noExpiration = elements.noExpirationInput.checked;
@@ -265,10 +391,16 @@ function handleFoodSubmit(event) {
 
   elements.expirationDateInput.setCustomValidity("");
   elements.frozenDateInput.setCustomValidity("");
-  items = items.some((item) => item.id === id)
-    ? items.map((item) => (item.id === id ? payload : item))
-    : [payload, ...items];
-  saveItems();
+  if (useCloud) {
+    await saveCloudFoodItem(payload);
+    await loadCloudData();
+  } else {
+    items = items.some((item) => item.id === id)
+      ? items.map((item) => (item.id === id ? payload : item))
+      : [payload, ...items];
+    saveItems();
+  }
+
   resetForm();
   render();
   renderShopping();
@@ -313,9 +445,19 @@ function editItem(id) {
   elements.nameInput.focus();
 }
 
-function deleteItem(id) {
-  items = items.filter((item) => item.id !== id);
-  saveItems();
+async function deleteItem(id) {
+  if (useCloud) {
+    const { error } = await supabaseClient.from("food_items").delete().eq("id", id).eq("household_id", householdId);
+    if (error) {
+      alert(`Nie udalo sie usunac produktu: ${error.message}`);
+      return;
+    }
+    await loadCloudData();
+  } else {
+    items = items.filter((item) => item.id !== id);
+    saveItems();
+  }
+
   render();
   renderShopping();
 }
@@ -538,9 +680,9 @@ function toggleShoppingPanel() {
   elements.shoppingToggleButton.classList.toggle("active", !elements.shoppingPanel.hidden);
 }
 
-function handleShoppingSubmit(event) {
+async function handleShoppingSubmit(event) {
   event.preventDefault();
-  addShoppingItem(
+  await addShoppingItem(
     elements.shoppingNameInput.value.trim(),
     Number(elements.shoppingAmountInput.value) || null,
     elements.shoppingUnitInput.value,
@@ -548,31 +690,66 @@ function handleShoppingSubmit(event) {
   elements.shoppingForm.reset();
 }
 
-function seedShoppingFromProducts() {
+async function seedShoppingFromProducts() {
   const existing = new Set(shoppingItems.map((item) => item.name.toLowerCase()));
+  const newItems = [];
   getUniqueArticles().forEach((name) => {
     if (!existing.has(name.toLowerCase())) {
-      shoppingItems.push({ id: crypto.randomUUID(), name, amount: null, unit: "" });
+      newItems.push({ id: crypto.randomUUID(), name, amount: null, unit: "" });
     }
   });
-  saveShoppingItems();
+
+  if (useCloud && newItems.length) {
+    const { error } = await supabaseClient.from("shopping_items").insert(newItems.map(toDbShoppingItem));
+    if (error) {
+      alert(`Nie udalo sie utworzyc listy zakupow: ${error.message}`);
+      return;
+    }
+    await loadCloudData();
+  } else {
+    shoppingItems.push(...newItems);
+    saveShoppingItems();
+  }
+
   renderShopping();
   elements.shoppingPanel.hidden = false;
   elements.shoppingToggleButton.classList.add("active");
 }
 
-function addShoppingItem(name, amount = null, unit = "") {
+async function addShoppingItem(name, amount = null, unit = "") {
   if (!name) return;
-  shoppingItems = [{ id: crypto.randomUUID(), name, amount, unit }, ...shoppingItems];
-  saveShoppingItems();
+  const item = { id: crypto.randomUUID(), name, amount, unit };
+
+  if (useCloud) {
+    const { error } = await supabaseClient.from("shopping_items").insert(toDbShoppingItem(item));
+    if (error) {
+      alert(`Nie udalo sie dodac do listy zakupow: ${error.message}`);
+      return;
+    }
+    await loadCloudData();
+  } else {
+    shoppingItems = [item, ...shoppingItems];
+    saveShoppingItems();
+  }
+
   renderShopping();
   elements.shoppingPanel.hidden = false;
   elements.shoppingToggleButton.classList.add("active");
 }
 
-function deleteShoppingItem(id) {
-  shoppingItems = shoppingItems.filter((item) => item.id !== id);
-  saveShoppingItems();
+async function deleteShoppingItem(id) {
+  if (useCloud) {
+    const { error } = await supabaseClient.from("shopping_items").delete().eq("id", id).eq("household_id", householdId);
+    if (error) {
+      alert(`Nie udalo sie usunac z listy: ${error.message}`);
+      return;
+    }
+    await loadCloudData();
+  } else {
+    shoppingItems = shoppingItems.filter((item) => item.id !== id);
+    saveShoppingItems();
+  }
+
   renderShopping();
 }
 
@@ -703,6 +880,114 @@ function setTheme(theme) {
   elements.themeToggleButton.setAttribute("aria-label", isDark ? "Tryb jasny" : "Tryb ciemny");
 }
 
+async function loadCloudData() {
+  if (!householdId) return;
+
+  const [foodResult, shoppingResult] = await Promise.all([
+    supabaseClient.from("food_items").select("*").eq("household_id", householdId).order("created_at", { ascending: false }),
+    supabaseClient.from("shopping_items").select("*").eq("household_id", householdId).order("created_at", { ascending: false }),
+  ]);
+
+  if (foodResult.error) throw foodResult.error;
+  if (shoppingResult.error) throw shoppingResult.error;
+
+  items = foodResult.data.map(fromDbFoodItem);
+  shoppingItems = shoppingResult.data.map(fromDbShoppingItem);
+}
+
+async function saveCloudFoodItem(item) {
+  const payload = toDbFoodItem(item);
+  const { error } = await supabaseClient.from("food_items").upsert(payload);
+  if (error) throw error;
+}
+
+async function migrateLocalDataToCloud() {
+  if (!householdId || localStorage.getItem(`virtual-fridge-migrated-${householdId}`) === "true") return;
+
+  const { data, error } = await supabaseClient
+    .from("food_items")
+    .select("id")
+    .eq("household_id", householdId)
+    .limit(1);
+
+  if (error) throw error;
+  if (data.length) {
+    localStorage.setItem(`virtual-fridge-migrated-${householdId}`, "true");
+    return;
+  }
+
+  const localItems = loadItems();
+  const localShopping = loadShoppingItems();
+
+  if (localItems.length) {
+    const { error: foodError } = await supabaseClient.from("food_items").insert(localItems.map(toDbFoodItem));
+    if (foodError) throw foodError;
+  }
+
+  if (localShopping.length) {
+    const { error: shoppingError } = await supabaseClient
+      .from("shopping_items")
+      .insert(localShopping.map(toDbShoppingItem));
+    if (shoppingError) throw shoppingError;
+  }
+
+  localStorage.setItem(`virtual-fridge-migrated-${householdId}`, "true");
+}
+
+function toDbFoodItem(item) {
+  return {
+    id: item.id,
+    household_id: householdId,
+    name: item.name,
+    price: item.price,
+    purchase_date: item.purchaseDate,
+    expiration_date: item.expirationDate || null,
+    amount: item.amount,
+    unit: item.unit,
+    category: item.category,
+    notes: item.notes || "",
+    is_frozen: item.isFrozen,
+    frozen_date: item.isFrozen ? item.frozenDate : null,
+    created_at: item.createdAt,
+  };
+}
+
+function fromDbFoodItem(row) {
+  return normalizeItem({
+    id: row.id,
+    name: row.name,
+    price: Number(row.price),
+    purchaseDate: row.purchase_date,
+    expirationDate: row.expiration_date,
+    amount: Number(row.amount),
+    unit: row.unit,
+    category: row.category,
+    notes: row.notes || "",
+    isFrozen: row.is_frozen,
+    frozenDate: row.frozen_date || "",
+    createdAt: row.created_at,
+  });
+}
+
+function toDbShoppingItem(item) {
+  return {
+    id: item.id,
+    household_id: householdId,
+    name: item.name,
+    amount: item.amount,
+    unit: item.unit || "",
+  };
+}
+
+function fromDbShoppingItem(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    amount: row.amount === null ? null : Number(row.amount),
+    unit: row.unit || "",
+  };
+}
+
 function loadItems() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return initialItems.map(normalizeItem);
@@ -795,6 +1080,10 @@ function formatCurrency(value) {
 function formatDate(dateValue) {
   if (!dateValue) return "brak daty";
   return new Intl.DateTimeFormat("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(dateValue));
+}
+
+function normalizeInviteCode(value) {
+  return value.trim().toUpperCase().replace(/\s+/g, "-");
 }
 
 function toInputDate(date) {

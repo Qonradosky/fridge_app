@@ -28,3 +28,25 @@ Aplikacja jest statyczna, wiec mozna ja wrzucic na Vercel jako projekt bez build
 ## Uwaga o PIN
 
 PIN w tej wersji jest wygodna blokada domowa, ale nie jest pelnym zabezpieczeniem serwerowym. Do prawdziwego prywatnego dostepu kolejnym krokiem bedzie Supabase Auth albo prosty backend z sesja.
+
+## Supabase
+
+Zeby wlaczyc wspolne dane dla kilku telefonow:
+
+1. Wejdz w Supabase -> SQL Editor.
+2. Wklej i uruchom zawartosc `supabase-schema.sql`.
+3. Wejdz w Authentication -> Providers -> Email.
+4. Do testow najprosciej wylaczyc email confirmation albo potwierdzic adres z maila przed pierwszym logowaniem.
+5. Wejdz w Project Settings -> API i skopiuj:
+   - Project URL,
+   - anon public key.
+6. Wpisz je w `supabase-config.js`:
+
+```js
+window.SUPABASE_CONFIG = {
+  url: "https://twoj-projekt.supabase.co",
+  anonKey: "twoj-anon-public-key",
+};
+```
+
+Po wdrozeniu aplikacja pokaze logowanie email/haslo i kod domu. Pierwsza osoba z danym kodem utworzy wspolny dom, kolejna osoba z tym samym kodem dolaczy do tych samych danych.

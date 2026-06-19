@@ -181,6 +181,12 @@ textarea:focus {
   gap: 10px;
 }
 
+.auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 .primary-button,
 .ghost-button,
 .icon-button {
@@ -726,6 +732,7 @@ textarea:focus {
 
 @media (max-width: 520px) {
   .pin-row,
+  .auth-actions,
   .form-grid,
   .unit-row,
   .list-toolbar,

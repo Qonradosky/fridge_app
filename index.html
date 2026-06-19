@@ -24,6 +24,25 @@
             </div>
             <p id="pinHint" class="muted"></p>
           </form>
+          <form id="cloudAuthForm" class="pin-form" hidden>
+            <label>
+              Email
+              <input id="emailInput" type="email" autocomplete="email" />
+            </label>
+            <label>
+              Haslo
+              <input id="passwordInput" type="password" autocomplete="current-password" minlength="6" />
+            </label>
+            <label>
+              Kod domu
+              <input id="householdCodeInput" maxlength="40" placeholder="np. NASZA-LODOWKA" />
+            </label>
+            <div class="auth-actions">
+              <button class="primary-button" id="signInButton" type="button">Zaloguj</button>
+              <button class="ghost-button" id="signUpButton" type="button">Utworz / dolacz</button>
+            </div>
+            <p id="cloudAuthHint" class="muted"></p>
+          </form>
         </div>
       </section>
 
@@ -239,6 +258,7 @@
       </article>
     </template>
 
+    <script src="./supabase-config.js"></script>
     <script src="./app.js" type="module"></script>
   </body>
 </html>
